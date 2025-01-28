@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Football Obstacle Game</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(to bottom right, #1a1a2e, #16213e);
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+
+        #gameContainer {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            height: 100vh;
+            max-height: 600px;
+        }
+
+        #gameCanvas {
+            width: 100%;
+            height: 100%;
+            border: 2px solid #fff;
+            border-radius: 10px;
+            background: linear-gradient(to bottom, #0f2027, #203a43, #2c5364);
+        }
+
+        .score-container {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px 20px;
+            border-radius: 10px;
+            z-index: 1;
+        }
+
+        #scoreBoard {
+            color: white;
+            font-size: 24px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        #gameOver {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            color: white;
+            font-size: 24px;
+            text-align: center;
+            z-index: 2;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 18px;
+            background: #4CAF50;
+            border: none;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+
+        button:hover {
+            background: #45a049;
+        }
+
+        @media (max-width: 600px) {
+            #scoreBoard {
+                font-size: 18px;
+            }
+
+            #gameOver {
+                font-size: 20px;
+                padding: 15px;
+            }
+
+            button {
+                font-size: 16px;
+                padding: 8px 16px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="gameContainer">
+        <div class="score-container">
+            <div id="scoreBoard">Score: <span id="score">0</span></div>
+        </div>
+        <canvas id="gameCanvas"></canvas>
+        <div id="gameOver">
+            Game Over!<br>
+            Final Score: <span id="finalScore">0</span><br>
+            <button onclick="resetGame()">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        const gameContainer = document.getElementById('gameContainer');
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const finalScoreElement = document.getElementById('finalScore');
+        const gameOverScreen = document.getElementById('gameOver');
+
+        // Set canvas size based on container
+        function resizeCanvas() {
+            canvas.width = gameContainer.clientWidth;
+            canvas.height = gameContainer.clientHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        let score = 0;
+        let gameRunning = true;
+
+        // Football properties
+        const ball = {
+            x: canvas.width / 2,
+            y: canvas.height - 30,
+            radius: canvas.width * 0.02, // Responsive size
+            speed: canvas.width * 0.006,
+            dx: 0,
+            dy: 0,
+            rotation: 0
+        };
+
+        // Obstacle properties
+        const obstacles = [];
+        const obstacleWidth = canvas.width * 0.08;
+        const obstacleHeight = canvas.height * 0.033;
+        const obstacleSpeed = canvas.height * 0.004;
+
+        // Collectible properties
+        const collectibles = [];
+        const collectibleRadius = canvas.width * 0.01;
+
+        // Controls
+        let rightPressed = false;
+        let leftPressed = false;
+        let upPressed = false;
+        let downPressed = false;
+
+        // Event listeners
+        document.addEventListener('keydown', keyDownHandler);
+        document.addEventListener('keyup', keyUpHandler);
+
+        // Touch controls
+        let touchStartX = null;
+        let touchStartY = null;
+
+        canvas.addEventListener('touchstart', function (e) {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+            e.preventDefault();
+        }, false);
+
+        canvas.addEventListener('touchmove', function (e) {
+            if (!touchStartX || !touchStartY) return;
+
+            let touchEndX = e.touches[0].clientX;
+            let touchEndY = e.touches[0].clientY;
+            let dx = touchEndX - touchStartX;
+            let dy = touchEndY - touchStartY;
+
+            ball.x += dx * 0.1;
+            ball.y += dy * 0.1;
+
+            touchStartX = touchEndX;
+            touchStartY = touchEndY;
+            e.preventDefault();
+        }, false);
+
+        canvas.addEventListener('touchend', function (e) {
+            touchStartX = null;
+            touchStartY = null;
+            e.preventDefault();
+        }, false);
+
+        function keyDownHandler(e) {
+            if (e.key === 'Right' || e.key === 'ArrowRight') rightPressed = true;
+            if (e.key === 'Left' || e.key === 'ArrowLeft') leftPressed = true;
+            if (e.key === 'Up' || e.key === 'ArrowUp') upPressed = true;
+            if (e.key === 'Down' || e.key === 'ArrowDown') downPressed = true;
+        }
+
+        function keyUpHandler(e) {
+            if (e.key === 'Right' || e.key === 'ArrowRight') rightPressed = false;
+            if (e.key === 'Left' || e.key === 'ArrowLeft') leftPressed = false;
+            if (e.key === 'Up' || e.key === 'ArrowUp') upPressed = false;
+            if (e.key === 'Down' || e.key === 'ArrowDown') downPressed = false;
+        }
+
+        function createObstacle() {
+            if (obstacles.length < 8 && Math.random() < 0.03) {
+                obstacles.push({
+                    x: Math.random() * (canvas.width - obstacleWidth),
+                    y: 0,
+                    width: obstacleWidth,
+                    height: obstacleHeight,
+                    color: `hsl(${Math.random() * 360}, 70%, 50%)`
+                });
+            }
+        }
+
+        function createCollectible() {
+            if (collectibles.length < 4 && Math.random() < 0.02) {
+                collectibles.push({
+                    x: Math.random() * (canvas.width - 2 * collectibleRadius) + collectibleRadius,
+                    y: 0,
+                    radius: collectibleRadius,
+                    color: '#7FDBFF'
+                });
+            }
+        }
+
+        function drawFootball(x, y, radius, rotation) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(rotation);
+
+            // Main ball
+            ctx.beginPath();
+            ctx.arc(0, 0, radius, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+
+            // Pentagon pattern
+            ctx.beginPath();
+            for (let i = 0; i < 5; i++) {
+                const angle = (i * 2 * Math.PI) / 5;
+                const nextAngle = ((i + 1) * 2 * Math.PI) / 5;
+
+                const startX = Math.cos(angle) * radius * 0.5;
+                const startY = Math.sin(angle) * radius * 0.5;
+                const endX = Math.cos(nextAngle) * radius * 0.5;
+                const endY = Math.sin(nextAngle) * radius * 0.5;
+
+                ctx.moveTo(startX, startY);
+                ctx.lineTo(endX, endY);
+                ctx.lineTo(0, 0);
+            }
+            ctx.fillStyle = '#000000';
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        function drawObstacles() {
+            obstacles.forEach(obstacle => {
+                ctx.beginPath();
+                ctx.rect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+                ctx.fillStyle = obstacle.color;
+                ctx.fill();
+                ctx.closePath();
+            });
+        }
+
+        function drawCollectibles() {
+            collectibles.forEach(collectible => {
+                ctx.beginPath();
+                ctx.arc(collectible.x, collectible.y, collectible.radius, 0, Math.PI * 2);
+                ctx.fillStyle = collectible.color;
+                ctx.fill();
+                ctx.closePath();
+            });
+        }
+
+        function drawBackground() {
+            // Grass effect
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, '#1a472a');
+            gradient.addColorStop(1, '#2d5a40');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Field lines
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.lineWidth = 2;
+
+            // Horizontal lines
+            for (let i = 0; i < canvas.height; i += 50) {
+                ctx.beginPath();
+                ctx.moveTo(0, i);
+                ctx.lineTo(canvas.width, i);
+                ctx.stroke();
+            }
+
+            // Vertical lines
+            for (let i = 0; i < canvas.width; i += 50) {
+                ctx.beginPath();
+                ctx.moveTo(i, 0);
+                ctx.lineTo(i, canvas.height);
+                ctx.stroke();
+            }
+        }
+
+        function moveBall() {
+            if (rightPressed && ball.x + ball.radius < canvas.width) {
+                ball.x += ball.speed;
+                ball.rotation += 0.1;
+            }
+            if (leftPressed && ball.x - ball.radius > 0) {
+                ball.x -= ball.speed;
+                ball.rotation -= 0.1;
+            }
+            if (upPressed && ball.y - ball.radius > 0) {
+                ball.y -= ball.speed;
+            }
+            if (downPressed && ball.y + ball.radius < canvas.height) {
+                ball.y += ball.speed;
+            }
+
+            // Keep ball within bounds
+            ball.x = Math.max(ball.radius, Math.min(canvas.width - ball.radius, ball.x));
+            ball.y = Math.max(ball.radius, Math.min(canvas.height - ball.radius, ball.y));
+        }
+
+        function updateObstacles() {
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                obstacles[i].y += obstacleSpeed;
+
+                // Check collision with ball
+                if (ball.x + ball.radius > obstacles[i].x &&
+                    ball.x - ball.radius < obstacles[i].x + obstacles[i].width &&
+                    ball.y + ball.radius > obstacles[i].y &&
+                    ball.y - ball.radius < obstacles[i].y + obstacles[i].height) {
+                    gameOver();
+                }
+
+                // Remove obstacles that are off screen
+                if (obstacles[i].y > canvas.height) {
+                    obstacles.splice(i, 1);
+                    score += 5;
+                    scoreElement.textContent = score;
+                }
+            }
+        }
+
+        function updateCollectibles() {
+            for (let i = collectibles.length - 1; i >= 0; i--) {
+                collectibles[i].y += obstacleSpeed;
+
+                // Check collision with ball
+                const dx = ball.x - collectibles[i].x;
+                const dy = ball.y - collectibles[i].y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                if (distance < ball.radius + collectibles[i].radius) {
+                    collectibles.splice(i, 1);
+                    score += 10;
+                    scoreElement.textContent = score;
+                    continue;
+                }
+
+                // Remove collectibles that are off screen
+                if (collectibles[i].y > canvas.height) {
+                    collectibles.splice(i, 1);
+                }
+            }
+        }
+
+        function gameOver() {
+            gameRunning = false;
+            finalScoreElement.textContent = score;
+            gameOverScreen.style.display = 'block';
+        }
+
+        function resetGame() {
+            score = 0;
+            scoreElement.textContent = score;
+            gameOverScreen.style.display = 'none';
+            obstacles.length = 0;
+            collectibles.length = 0;
+            ball.x = canvas.width / 2;
+            ball.y = canvas.height - 30;
+            ball.rotation = 0;
+            gameRunning = true;
+            animate();
+        }
+
+        function animate() {
+            if (!gameRunning) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawBackground();
+
+            createObstacle();
+            createCollectible();
+
+            moveBall();
+            updateObstacles();
+            updateCollectibles();
+
+            drawObstacles();
+            drawCollectibles();
+            drawFootball(ball.x, ball.y, ball.radius, ball.rotation);
+
+            requestAnimationFrame(animate);
+        }
+
+        // Start the game
+        resetGame();
+    </script>
+</body>
+
+</html>
